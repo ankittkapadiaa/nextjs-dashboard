@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { sql } from '@vercel/postgres';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
 export type State = {
   errors?: {
     customerId?: string[];
@@ -42,14 +43,14 @@ export async function createInvoice(prevState: State, formData: FormData) {
       message: 'Missing Fields. Failed to Create Invoice.',
     };
   }
-
-  const amountInCents = validatedFields.data.amount * 100;
+   const { customerId, amount, status } = validatedFields.data;
+  const amountInCents = amount * 100;
   const date = new Date().toISOString().split('T')[0];
 
    try {
     await sql`
       INSERT INTO invoices (customer_id, amount, status, date)
-      VALUES (${validatedFields.data.customerId}, ${amountInCents}, ${status}, ${date})
+      VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
   } catch (error) {
     return {
@@ -102,5 +103,25 @@ export async function deleteInvoice(id: string) {
     return { message: 'Deleted Invoice.' };
   } catch (error) {
     return { message: 'Database Error: Failed to Delete Invoice.' };
+  }
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  try {
+    console.log('Reached here', formData.values)
+    await signIn('credentials', formData);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case 'CredentialsSignin':
+          return 'Invalid credentials.';
+        default:
+          return 'Something went wrong.';
+      }
+    }
+    throw error;
   }
 }
